@@ -1,0 +1,105 @@
+---
+title: "Exercise Quality Prediction Using WLE Dataset"
+output: html_document
+---
+
+**Executive Summary**
+
+The dataset collected and presented in [Velloso et al., 2013](http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf) 
+was used to built a model with the aim of predicting the quality of a weight lifting activity. After exploring a variety of techniques I found that the best results for this particular problem was found when using a Random Forest model. Using this approach I achieved an accuracy of $\sim 99.7\%$. 
+
+**Background**
+
+The researchers asked a series of participants to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). These are the classes I will try to predict during this work, specified in the dataset provided as variable "classe". 
+
+**Data Loading and Feature Selection**
+
+The training dataset was divided into training and testing (or cross-validation dataset). All data manipulation performed to the training dataset will be systematically perform on the cross-validation dataset and eventually on the testing dataset of 20 observation. 
+
+Variables which had incomplete data (NA or empty values) in the test set were excluded from the model.
+
+In addition, the first seven columns of the datasets do not correspond to any physical measurement but to dates, observing window, etc. Therefore, these variables were also excluded. After this pre-processing, the data sets used to built the prediction tool was comprised by a total of 53 variables (including our outcome variable).
+
+Various techniques, such as correlation thresholds and near-zero-variance functions, were attempted in order to identify and possibly exclude features that may not be significant.  However, doing so resulted in a marginal loss of accuracy.  We found it was possible to reduce the number of features to approximately 20 and achieve almost 99% accuracy.  However, the performance cost of including the extra features was minimal, so we chose to include them in order to maximize accuracy.
+
+```{r, fig.width=10, echo=TRUE, cache=TRUE}
+
+readData <- function(file.name, missing.types) {
+  read.csv( file.name, sep=","
+            ,na.strings=missing.types 
+  )
+}
+
+train.data.file <- "pml-training.csv"
+test.data.file <- "pml-testing.csv"
+missing.types <- c("NA", "")
+
+train.raw <- readData(train.data.file, missing.types)
+df.train <- train.raw[,-1] #remove row number
+
+test.raw <- readData(test.data.file, missing.types)
+df.infer <- test.raw[,-1] #remove row number
+
+# Remove intuitively non-useful variables
+df.train <- subset(df.train, select = -c(user_name,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,new_window,num_window) )
+
+# Remove columnns with NA's
+df.train <- df.train[,colSums(is.na(df.train)) == 0]
+final_features <- colnames(df.train[,-53])
+```
+
+**Model Generation**
+
+Based on the results derived from all the previous techniques, I found that the most adequate technique for this particular prediction exercise here was Random Forest. We also found that the randomForest package had much better performance for our particular configuration the "rf" model type within the caret package.
+
+
+```{r, eval=TRUE, cache=FALSE}
+suppressMessages(library(caret))
+suppressMessages(library(randomForest))
+
+set.seed(415)
+inTrain = createDataPartition(df.train$classe, p = 3/4)[[1]]
+training = df.train[ inTrain,]
+testing = df.train[ -inTrain,]
+
+fit <- randomForest(as.factor(classe) ~ ., data=training, importance=TRUE)
+
+```
+
+**Cross-Validation Results**
+
+```{r, cache=TRUE}
+fit.pred <- predict(fit, testing)
+print(confusionMatrix(fit.pred, testing$classe))
+
+```
+
+As seen above, the accuracy attained by using a Random Forest on the processed training dataset is 99.7%. Details about useful parameters such as Sensitivity or Specificity, are also described above. In addition, Figure 2 shows a visualization of the importance associated to the variables included in the tree. 
+
+```{r, fig.width= 10, fig.height=7, cache=FALSE}
+varImpPlot(fit)
+```
+
+**Figure 2.** These plots are intended to give an idea of the relative importance of each variable considered during the random forest process. For simplicity, the Figure can be interpreted as follows: variables to the upper right-side of the plots are more important, with "importance" decreasing as we move towards the bottom left-side of the plots.
+
+**Predictions**
+
+When the random forest is applied to test set of 20 observations provided the results are: 
+
+```{r, cache=TRUE}
+# Run on prediction set
+df.infer <- df.infer[,final_features]
+Predictions <- predict(fit, df.infer)
+print(Predictions)
+```
+
+**Conclusion**
+
+I have used the Vellose et al., 2013 dataset and explore a variety of techniques to predict the quality of an executing activity, quantified in 5 different classes ("classe"" variable in the dataset : A, B, C, D and E). Using a Random Forest technique, I find an impressive accuracy of $\sim 99.7\%$. From the results, it appears that variables corresponding to parameters measured in the z and y axis are more relevant in the dataset that those in the x axis. 
+
+**References**
+
+[1] Velloso et al., 2013: [Qualitative Activity Recognition of Weight Lifting Exercises](http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf)
+
+
+
